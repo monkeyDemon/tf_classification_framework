@@ -1,0 +1,9 @@
+# this directory is used to save imagenet pretrained weights
+
+# TODO: wait to rewrite
+
+export MODEL=efficientnet-b0
+wget https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/ckpts/${MODEL}.tar.gz
+tar xf ${MODEL}.tar.gz
+wget https://upload.wikimedia.org/wikipedia/commons/f/fe/Giant_Panda_in_Beijing_Zoo_1.JPG -O panda.jpg
+wget https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/eval_data/labels_map.txt
