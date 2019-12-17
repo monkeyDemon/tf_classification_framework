@@ -9,11 +9,10 @@ parallel data generator
 from __future__ import division
 import os
 import sys
+import PIL
 import time
-import cv2
 import random
 import traceback
-import threading
 import numpy as np
 import multiprocessing
 
@@ -198,32 +197,32 @@ class data_parallel_generator():
 
 
     def _process_single_img(self, img_path):
-        img = cv2.imread(img_path)
-        shape = img.shape
+        img = PIL.Image.open(img_path, 'r')
 
         # convert channel
-        if len(shape) == 2:
-            img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
-        else:
-            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        if img.mode != 'RGB':
+            img = img.convert('RGB')
 
         if self.is_train == True:
             if self.augment_method == 'none':
                 img = self._fix_shape(img)
+            elif self.augment_method == 'baseline':
+                img = self._do_augment_baseline(img)
             elif self.augment_method == 'general1': 
                 img = self._do_augment_general1(img)
             else:
                 raise RuntimeError("use unknown value of parameter AUGMENT_METHOD")
         else:
             img = self._fix_shape(img)
+        
+        # convert PIL 2 numpy
+        img = np.array(img)
         return img
 
 
     def _fix_shape(self, img):
-        shape = img.shape
-        width = shape[1]
-        height = shape[0]
-
+        width, height = img.size
+    
         # resize(maintain aspect ratio) 
         long_edge_size = self.image_size
         if width > height:
@@ -232,18 +231,17 @@ class data_parallel_generator():
         else:
             width = int(width * long_edge_size / height)
             height = long_edge_size
-        img = cv2.resize(img, (width, height), interpolation=cv2.INTER_LINEAR)
-
+        #img = img.resize((width, height), PIL.Image.ANTIALIAS)
+        img = img.resize((width, height), PIL.Image.BILINEAR)
+    
         # padding
-        fix_img = np.zeros((long_edge_size, long_edge_size, 3))
+        fix_img = PIL.Image.new('RGB', (long_edge_size, long_edge_size), (0, 0, 0))
         if width > height:
-            st = int((long_edge_size - height)/2)
-            ed = st + height
-            fix_img[st:ed,:,:] = img
+            h_st = int((long_edge_size - height)/2)
+            fix_img.paste(img, (0, h_st))
         else:
-            st = int((long_edge_size - width)/2)
-            ed = st + width
-            fix_img[:,st:ed,:] = img
+            w_st = int((long_edge_size - width)/2)
+            fix_img.paste(img, (w_st, 0))
         return fix_img
 
 
@@ -269,10 +267,6 @@ class data_parallel_generator():
         # 随机椒盐噪声
         #image, change_flag =  random_salt_pepper(image, probability=0.05, intensity=0.05)
     
-        # cutout not implement 
-        #Regularizing Neural Networks by Penalizing Confident Output Distributions
-        # https://openreview.net/forum?id=HkCjNI5ex       
-
         # -----position transformation-----
 
         # random crop or padding
@@ -299,6 +293,31 @@ class data_parallel_generator():
         return image
 
 
+    def _do_augment_baseline(self, image):
+        # random crop or padding
+        if random.random() < 0.5:
+            # crop
+            image = random_crop(image, crop_probability=0.8, v=0.3)
+        else:
+            # padd
+            image = random_padd(image, padd_probability=0.8, v=0.3)
+    
+        # random flip 
+        image = random_flip(image, left_right_probability=0.5, up_down_probability=0.05)
+    
+        # cutout
+        if random.random() < 0.8:
+            image = apply_augment(image, 'Cutout', 1)
+    
+        # fix the image shape to [size, size]
+        image = self._fix_shape(image)
+        return image
+
+
+
+# -------------------------------------------------------------------------------------------
+# 多进程并行喂数据
+# -------------------------------------------------------------------------------------------
 
 
 def generate_proc(batch_queue, generator, lock, share_dict):

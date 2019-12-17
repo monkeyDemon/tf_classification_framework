@@ -13,9 +13,228 @@ import cv2
 import time
 import random
 import numpy as np
+import PIL, PIL.ImageOps, PIL.ImageEnhance, PIL.ImageDraw
 
 
 
+# -------------------------------------------------------------------------
+# baseline data augmentation operator
+# -------------------------------------------------------------------------
+
+# random crop
+def random_crop(image, crop_probability=0.8, v=0.125):
+    if random.random() >= crop_probability:
+        return image
+
+    # 随机变化幅度
+    intensity = random.random() * v
+
+    # 随机crop位置
+    width, height = image.size
+    h_st = int(height * intensity * random.random())
+    h_ed = height - 1 - int(height * intensity * random.random())
+    new_h = h_ed - h_st + 1
+    w_st = int(width * intensity * random.random())
+    w_ed = width - 1 - int(width * intensity * random.random())
+    new_w = w_ed - w_st + 1
+
+    # check
+    if new_w > 0 and new_h > 0: 
+        crop_box = [w_st, h_st, new_w, new_h] 
+        return image
+    else:
+        raise RuntimeError("may be has bug, check")
+        return image
+
+    image_cropped = image.crop(crop_box)
+    return image_cropped
+
+
+# random padding
+def random_padd(image, padd_probability=0.8, v=0.125):
+    if random.random() > padd_probability:
+        return image
+
+    # 随机变化幅度
+    intensity = 1 + random.random() * v
+
+    width, height = image.size
+    new_width = int(width * intensity)
+    new_height = int(height * intensity)
+
+    # padding
+    back_image = PIL.Image.new('RGB', (new_width, new_height), (0, 0, 0))
+    h_st = int((new_height - height)/2)
+    w_st = int((new_width - width)/2)
+    
+    #back_image.paste(image, (w_st, h_st, width, height))
+    back_image.paste(image, (w_st, h_st))
+    return back_image
+
+
+# random flip
+def random_flip(image, left_right_probability=0.5, up_down_probability=0.05):
+    if random.random() <= left_right_probability:
+        image = image.transpose(PIL.Image.FLIP_LEFT_RIGHT)
+    if random.random() <= up_down_probability:
+        image = image.transpose(PIL.Image.FLIP_TOP_BOTTOM)
+    return image
+
+
+# -------------------------------------------------------------------------
+# data augmentation operator in AutoAugment and Fast AutoAugment
+# -------------------------------------------------------------------------
+random_mirror = True
+
+def ShearX(img, v):  # [-0.3, 0.3]
+    assert -0.3 <= v <= 0.3
+    if random_mirror and random.random() > 0.5:
+        v = -v
+    return img.transform(img.size, PIL.Image.AFFINE, (1, v, 0, 0, 1, 0))
+
+
+def ShearY(img, v):  # [-0.3, 0.3]
+    assert -0.3 <= v <= 0.3
+    if random_mirror and random.random() > 0.5:
+        v = -v
+    return img.transform(img.size, PIL.Image.AFFINE, (1, 0, 0, v, 1, 0))
+
+
+def TranslateX(img, v):  # [-150, 150] => percentage: [-0.45, 0.45]
+    assert -0.45 <= v <= 0.45
+    if random_mirror and random.random() > 0.5:
+        v = -v
+    v = v * img.size[0]
+    return img.transform(img.size, PIL.Image.AFFINE, (1, 0, v, 0, 1, 0))
+
+
+def TranslateY(img, v):  # [-150, 150] => percentage: [-0.45, 0.45]
+    assert -0.45 <= v <= 0.45
+    if random_mirror and random.random() > 0.5:
+        v = -v
+    v = v * img.size[1]
+    return img.transform(img.size, PIL.Image.AFFINE, (1, 0, 0, 0, 1, v))
+
+
+def TranslateXAbs(img, v):  # [-150, 150] => percentage: [-0.45, 0.45]
+    assert 0 <= v <= 10
+    if random.random() > 0.5:
+        v = -v
+    return img.transform(img.size, PIL.Image.AFFINE, (1, 0, v, 0, 1, 0))
+
+
+def TranslateYAbs(img, v):  # [-150, 150] => percentage: [-0.45, 0.45]
+    assert 0 <= v <= 10
+    if random.random() > 0.5:
+        v = -v
+    return img.transform(img.size, PIL.Image.AFFINE, (1, 0, 0, 0, 1, v))
+
+
+def Rotate(img, v):  # [-30, 30]
+    assert -30 <= v <= 30
+    if random_mirror and random.random() > 0.5:
+        v = -v
+    return img.rotate(v)
+
+
+def AutoContrast(img, _):
+    return PIL.ImageOps.autocontrast(img)
+
+
+def Invert(img, _):
+    return PIL.ImageOps.invert(img)
+
+
+def Equalize(img, _):
+    return PIL.ImageOps.equalize(img)
+
+
+def Solarize(img, v):  # [0, 256]
+    assert 0 <= v <= 256
+    return PIL.ImageOps.solarize(img, v)
+
+
+def Posterize(img, v):  # [4, 8]
+    assert 4 <= v <= 8
+    v = int(v)
+    return PIL.ImageOps.posterize(img, v)
+
+
+def Posterize2(img, v):  # [0, 4]
+    assert 0 <= v <= 4
+    v = int(v)
+    return PIL.ImageOps.posterize(img, v)
+
+
+def Contrast(img, v):  # [0.1,1.9]
+    assert 0.1 <= v <= 1.9
+    return PIL.ImageEnhance.Contrast(img).enhance(v)
+
+
+def Color(img, v):  # [0.1,1.9]
+    assert 0.1 <= v <= 1.9
+    return PIL.ImageEnhance.Color(img).enhance(v)
+
+
+def Brightness(img, v):  # [0.1,1.9]
+    assert 0.1 <= v <= 1.9
+    return PIL.ImageEnhance.Brightness(img).enhance(v)
+
+
+def Sharpness(img, v):  # [0.1,1.9]
+    assert 0.1 <= v <= 1.9
+    return PIL.ImageEnhance.Sharpness(img).enhance(v)
+
+
+def Cutout(img, v):  # [0, 60] => percentage: [0, 0.2]
+    assert 0.0 <= v <= 0.2
+    if v <= 0.:
+        return img
+
+    width, height = img.size
+    max_edge = width if width > height else height
+    v = v * max_edge
+    #if width > height:
+    #    v = v * height
+    #else:
+    #    v = v * width
+    return CutoutAbs(img, v)
+
+
+def CutoutAbs(img, v):  # [0, 60] => percentage: [0, 0.2]
+    # assert 0 <= v <= 20
+    if v < 0:
+        return img
+    w, h = img.size
+    x0 = np.random.uniform(w)
+    y0 = np.random.uniform(h)
+
+    x0 = int(max(0, x0 - v / 2.))
+    y0 = int(max(0, y0 - v / 2.))
+    x1 = min(w, x0 + v)
+    y1 = min(h, y0 + v)
+
+    xy = (x0, y0, x1, y1)
+    color = (125, 123, 114)
+    # color = (0, 0, 0)
+    img = img.copy()
+    PIL.ImageDraw.Draw(img).rectangle(xy, color)
+    return img
+
+
+def SamplePairing(imgs):  # [0, 0.4]
+    def f(img1, v):
+        i = np.random.choice(len(imgs))
+        img2 = PIL.Image.fromarray(imgs[i])
+        return PIL.Image.blend(img1, img2, v)
+
+    return f
+
+
+
+
+# ------------------------------------------------------------------------
+# 以下是自定义的一些数据增强方法，可能有重复，需要整理
 
 # 随机调整亮度 
 # 变暗/变亮的过程中实际上也调整了图片的对比度
@@ -173,81 +392,6 @@ def random_salt_pepper(image, probability=0.05, intensity=0.05):
     return image, has_change
 
 
-    
-
-
-# -----position transformation-----
-
-
-# random crop
-def random_crop(image, crop_probability=0.8, max_intensity=0.125):
-    has_change = False
-    if random.random() <= crop_probability:
-        has_change = True
-    else:
-        return image, has_change
-
-    # 随机变化幅度
-    intensity = random.random() * max_intensity
-
-    # 随机crop位置
-    height, width = image.shape[:2]
-    h_st = int(height * intensity * random.random())
-    h_ed = height - 1 - int(height * intensity * random.random())
-    w_st = int(width * intensity * random.random())
-    w_ed = width - 1 - int(width * intensity * random.random())
-
-    # check
-    if h_st < h_ed and w_st < w_ed: 
-        image = image[h_st:h_ed, w_st:w_ed, :]
-        return image, has_change
-    else:
-        raise RuntimeError("may be has bug")
-        return image, False
-
-
-
-# random padding
-def random_padd(image, padd_probability=0.5, max_intensity=0.125):
-    has_change = False
-    if random.random() <= padd_probability:
-        has_change = True
-    else:
-        return image, has_change
-
-    # 随机变化幅度
-    intensity = 1 + random.random() * max_intensity
-
-    shape = image.shape
-    height, width = shape[:2]
-    new_height = int(height * intensity)
-    new_width = int(width * intensity)
-
-    # padding
-    back_image = np.zeros((new_height, new_width, 3))
-    h_st = int((new_height - height)/2)
-    h_ed = h_st + height
-    w_st = int((new_width - width)/2)
-    w_ed = w_st + width
-    back_image[h_st:h_ed, w_st:w_ed, :] = image
-    return back_image, has_change
-    
-
-
-# random flip 
-def random_flip(image, left_right_probability=0.5, up_down_probability=0.3):
-    has_change = False
-    r = random.random()
-    if r <= left_right_probability:
-        image = cv2.flip(image, 1)#水平翻转
-        has_change = True
-    r = random.random()
-    if r <= up_down_probability:
-        image = cv2.flip(image, 0)#垂直翻转
-        has_change = True
-    return image, has_change
-    
-
 # 随机转置
 def random_transpose_image(image, probability=0.2):
     raise RuntimeError("wait to finish")
@@ -296,12 +440,56 @@ def random_affine_transform(image, probability):
 
 
 # --------------------------------------------------------------------------------------------
+# 定义统一的调用接口
+
+def augment_list(for_autoaug=True):  # 16 oeprations and their ranges
+    l = [
+        (ShearX, -0.3, 0.3),  # 0
+        (ShearY, -0.3, 0.3),  # 1
+        (TranslateX, -0.45, 0.45),  # 2
+        (TranslateY, -0.45, 0.45),  # 3
+        (Rotate, -30, 30),  # 4
+        (AutoContrast, 0, 1),  # 5
+        (Invert, 0, 1),  # 6
+        (Equalize, 0, 1),  # 7
+        (Solarize, 0, 256),  # 8
+        (Posterize, 4, 8),  # 9
+        (Contrast, 0.1, 1.9),  # 10
+        (Color, 0.1, 1.9),  # 11
+        (Brightness, 0.1, 1.9),  # 12
+        (Sharpness, 0.1, 1.9),  # 13
+        (Cutout, 0, 0.2),  # 14
+        # (SamplePairing(imgs), 0, 0.4),  # 15
+    ]
+    if for_autoaug:
+        l += [
+            (CutoutAbs, 0, 20),  # compatible with auto-augment
+            (Posterize2, 0, 4),  # 9
+            (TranslateXAbs, 0, 10),  # 9
+            (TranslateYAbs, 0, 10),  # 9
+        ]
+    return l
+
+
+augment_dict = {fn.__name__: (fn, v1, v2) for fn, v1, v2 in augment_list()}
+
+
+def get_augment(name):
+    return augment_dict[name]
+
+
+def apply_augment(img, name, level):
+    augment_fn, low, high = get_augment(name)
+    return augment_fn(img.copy(), level * (high - low) + low)
+
+
+
+# --------------------------------------------------------------------------------------------
+# 测试用函数
 
 
 def _fix_shape(img):
-    shape = img.shape
-    width = shape[1]
-    height = shape[0]
+    width, height = img.size
 
     # resize(maintain aspect ratio) 
     long_edge_size = 160
@@ -311,63 +499,37 @@ def _fix_shape(img):
     else:
         width = int(width * long_edge_size / height)
         height = long_edge_size
-    img = cv2.resize(img, (width, height), interpolation=cv2.INTER_LINEAR)
+    #img = img.resize((width, height), PIL.Image.ANTIALIAS)
+    img = img.resize((width, height), PIL.Image.BILINEAR)
 
     # padding
-    fix_img = np.zeros((long_edge_size, long_edge_size, 3))
+    fix_img = PIL.Image.new('RGB', (long_edge_size, long_edge_size), (0, 0, 0))
     if width > height:
-        st = int((long_edge_size - height)/2)
-        ed = st + height
-        fix_img[st:ed,:,:] = img
+        h_st = int((long_edge_size - height)/2)
+        fix_img.paste(img, (0, h_st))
     else:
-        st = int((long_edge_size - width)/2)
-        ed = st + width
-        fix_img[:,st:ed,:] = img
+        w_st = int((long_edge_size - width)/2)
+        fix_img.paste(img, (w_st, 0))
+    
     return fix_img
 
 
 def _do_augment(image):
-    # -----color space transformation-----
-
-    # 随机调整亮度/对比度
-    #image, change_flag = random_adjust_brightness(image, probability=0.7, max_intensity=0.4)
-
-    # 随机调整色相  no implement 
-    #image = random_adjust_hue(image, 0.3)
-
-    # 图像饱和度
-    image, change_flag = random_adjust_saturation(image, probability=0.3, max_intensity=0.5)
-
-    # 随机添加均匀分布噪声  no implement 
-    #image = random_uniform_noise(image, 0.3, img_shape)
-
-    # 随机进行高斯滤波
-    #image, change_flag = random_gauss_filtering(image, probability=0.15)   
-
-    # 随机椒盐噪声
-    #image, change_flag =  random_salt_pepper(image, probability=0.05, intensity=0.05)
-
-    # cutout no implement 
-    #Regularizing Neural Networks by Penalizing Confident Output Distributions
-    # https://openreview.net/forum?id=HkCjNI5ex
-
-
-    # -----position transformation-----
 
     # random crop or padding
-    #if random.random() < 0.5:
-    #    image, change_flag = random_crop(image, crop_probability=0.8, max_intensity=0.3)
-    #else:
-    #    image, change_flag = random_padd(image, padd_probability=0.8, max_intensity=0.3)
+    if random.random() < 0.5:
+        # crop
+        image = random_crop(image, crop_probability=0.8, v=0.3)
+    else:
+        # padd
+        image = random_padd(image, padd_probability=0.8, v=0.3)
 
     # random flip 
-    #image, change_flag = random_flip(image, left_right_probability=0.5, up_down_probability=0.05)
+    image = random_flip(image, left_right_probability=0.5, up_down_probability=0.05)
 
-    # 随机转置 no implement 
-    #image = _transpose_image(image, 0.2)
-
-    # 随机旋转
-    #image, change_flag = random_rotate(image, rotate_prob=0.1, rotate_angle_max=10) 
+    # cutout
+    if random.random() < 0.8:
+        image = apply_augment(image, 'Cutout', 1)
     
     # fix the image shape to [size, size]
     image = _fix_shape(image)
@@ -379,7 +541,7 @@ if __name__ == "__main__":
     
     debug_img_dir = '/new_train_data/ansheng/porn_dataset/hx6/normal'
     debug_save_dir = 'visual_debug'
-    debug_num = 1000
+    debug_num = 200
 
     cnt = 0 
     total_time = 0
@@ -387,20 +549,17 @@ if __name__ == "__main__":
         if cnt == debug_num:
             break
         img_path = os.path.join(debug_img_dir, img_name)
-        img = cv2.imread(img_path)
-        
+        img = PIL.Image.open(img_path, 'r')
+
         st = time.time()
         img_aug = _do_augment(img)
         ed = time.time()
-
-        img_aug = _fix_shape(img_aug)
 
         cnt += 1
         total_time += ed - st
         if cnt <= 200:
             save_path = os.path.join(debug_save_dir, img_name)
             save_path_aug = os.path.join(debug_save_dir, img_name[:-4] + '_aug.jpg')
-            cv2.imwrite(save_path, img)
-            cv2.imwrite(save_path_aug, img_aug)
+            img.save(save_path)
+            img_aug.save(save_path_aug)
     print("average use time: {} ms".format(total_time / cnt * 1000))
-
