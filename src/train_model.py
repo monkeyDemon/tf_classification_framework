@@ -68,24 +68,29 @@ def main(_):
     dataset_workers = dataset_paras['DATA_WORKERS']
 
     # output parameters
-    model_save_dir = os.path.join(output_paras['MODEL_SAVE_DIR'], output_paras['EXPERIMENT_NAME'])  # Path to the model.ckpt-(num_steps) will be saved
-    tensorboard_summary_dir = os.path.join(model_save_dir, 'tensorboard_summary')
+    output_base_dir = output_paras['OUTPUT_SAVE_DIR']
+    experiment_base_dir = os.path.join(output_base_dir, output_paras['EXPERIMENT_NAME'])
+
+    model_save_dir = os.path.join(experiment_base_dir, 'weights')
+    log_save_dir = os.path.join(experiment_base_dir, 'log')
+    tensorboard_summary_dir = os.path.join(log_save_dir, 'tensorboard_summary')
+    result_save_dir = os.path.join(experiment_base_dir, 'result')
+
+    mkdir_if_nonexist(model_save_dir, raise_error=False)
+    mkdir_if_nonexist(tensorboard_summary_dir, raise_error=False)
+    mkdir_if_nonexist(result_save_dir, raise_error=False)
+
     ckpt_max_save_num = output_paras['CKPT_MAX_SAVE_NUM']
     show_augment_data = output_paras['SHOW_AUGMENT_DATA']
     print_details_in_log = output_paras['PRINT_DETAILS_IN_LOG']
     if show_augment_data:
-        augment_data_save_dir = os.path.join(output_paras['TEST_RESULT_SAVE_DIR'], 'debug')
+        augment_data_save_dir = os.path.join(result_save_dir, 'visual_data_augment')
         mkdir_if_nonexist(augment_data_save_dir, raise_error=False)
 
     # trick parameters
     moving_average_decay = trick_paras['MOVING_AVERAGE_DECAY']
     label_smooth_epsilon = trick_paras['LABEL_SMOOTH_EPSILON']
-
     
-    # check directory 
-    mkdir_if_nonexist(model_save_dir, raise_error=False)   # TODO:
-    mkdir_if_nonexist(tensorboard_summary_dir, raise_error=False)
-
     # import model by network_name
     import_str = import_model_by_networkname(network_name)
     exec(import_str)
@@ -299,8 +304,7 @@ def main(_):
             if find_better_model:
                 ckpt_name = network_name + "-epoch{0}.ckpt".format(epoch+1)
                 model_save_path = os.path.join(model_save_dir, ckpt_name)
-                #saver.save(sess, model_save_path, global_step = total_batch_num) # TODO: global_step?
-                saver.save(sess, model_save_path, global_step=global_step) # TODO: global_step?
+                saver.save(sess, model_save_path, global_step=global_step)
                 print('save mode to {}'.format(model_save_path))
                 sys.stdout.flush()
             else:

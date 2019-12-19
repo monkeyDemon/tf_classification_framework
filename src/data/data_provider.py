@@ -34,9 +34,10 @@ class data_parallel_generator():
         self.augment_method = config_dict['DATASET']['AUGMENT_METHOD']
         self.is_train= is_train
 
-        # TODO
+        # get label file path
         output_paras = config_dict['OUTPUT']
-        model_save_dir = os.path.join(output_paras['MODEL_SAVE_DIR'], output_paras['EXPERIMENT_NAME'])
+        experiment_base_dir = os.path.join(output_paras['OUTPUT_SAVE_DIR'], output_paras['EXPERIMENT_NAME'])
+        model_save_dir = os.path.join(experiment_base_dir, 'weights')
         label_file = os.path.join(model_save_dir, 'label.txt')
     
 
