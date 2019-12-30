@@ -40,6 +40,7 @@ DATASET:
   MAX_SAMPLE_PER_CLASS: -1              # max sample number for per category, set -1 to no use this parameter(please only use -1, other value has bug now)
   AUGMENT_METHOD: baseline              # the augmentation method to use: now can use 'baseline', 'general1' or 'none'
   DATA_WORKERS: 4
+  USE_CHANNEL_NORMALIZATION: 1          # use channel mean to do normalization or just img = (img - 128) / 128
 OUTPUT:
   OUTPUT_SAVE_DIR: output
   EXPERIMENT_NAME: efficientnet-b0_hx5
