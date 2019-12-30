@@ -34,13 +34,12 @@ class data_parallel_generator():
         self.augment_method = config_dict['DATASET']['AUGMENT_METHOD']
         self.is_train= is_train
 
-        # get label file path
         output_paras = config_dict['OUTPUT']
         experiment_base_dir = os.path.join(output_paras['OUTPUT_SAVE_DIR'], output_paras['EXPERIMENT_NAME'])
         model_save_dir = os.path.join(experiment_base_dir, 'weights')
+        # get label file path
         label_file = os.path.join(model_save_dir, 'label.txt')
     
-
         # show the basic infomation of dataset
         label_idx = 0
         label_names = []
@@ -51,6 +50,13 @@ class data_parallel_generator():
         self.classes= len(label_names)
         labels_to_class_names = dict(zip(range(len(label_names)), label_names))
         dataset_utils.write_label_file(labels_to_class_names, model_save_dir)
+
+        # get dataset mean std info
+        mean_std_file = os.path.join(model_save_dir, 'dataset_mean_var.txt')
+        self.dataset_rgb_mean, self.dataset_rgb_std = dataset_utils.load_dataset_mean_std_file(mean_std_file)
+
+        # set back color
+        self.back_color = tuple([int(x) for x in self.dataset_rgb_mean])
 
         self.on_epoch_end()
 
@@ -200,9 +206,8 @@ class data_parallel_generator():
     def _process_single_img(self, img_path):
         img = PIL.Image.open(img_path, 'r')
 
-        # convert channel
-        if img.mode != 'RGB':
-            img = img.convert('RGB')
+        # make sure channel order is RGB
+        img, _ = dataset_utils.process_image_channels(img)
 
         if self.is_train == True:
             if self.augment_method == 'none':
@@ -218,32 +223,22 @@ class data_parallel_generator():
         
         # convert PIL 2 numpy
         img = np.array(img)
+
+        # normalization
+        img = dataset_utils.channel_normalization(img, self.dataset_rgb_mean, self.dataset_rgb_std)
         return img
 
-
+    
     def _fix_shape(self, img):
         width, height = img.size
     
         # resize(maintain aspect ratio) 
         long_edge_size = self.image_size
-        if width > height:
-            height = int(height * long_edge_size / width)
-            width = long_edge_size
-        else:
-            width = int(width * long_edge_size / height)
-            height = long_edge_size
-        #img = img.resize((width, height), PIL.Image.ANTIALIAS)
-        img = img.resize((width, height), PIL.Image.BILINEAR)
+        img = dataset_utils.maintain_aspect_ratio_resize(img, long_edge_size)
     
         # padding
-        fix_img = PIL.Image.new('RGB', (long_edge_size, long_edge_size), (0, 0, 0))
-        if width > height:
-            h_st = int((long_edge_size - height)/2)
-            fix_img.paste(img, (0, h_st))
-        else:
-            w_st = int((long_edge_size - width)/2)
-            fix_img.paste(img, (w_st, 0))
-        return fix_img
+        img_padd = dataset_utils.padding_image_square(img, self.back_color)
+        return img_padd
 
 
     def _do_augment_general1(self, image):
@@ -301,14 +296,14 @@ class data_parallel_generator():
             image = random_crop(image, crop_probability=0.8, v=0.3)
         else:
             # padd
-            image = random_padd(image, padd_probability=0.8, v=0.3)
+            image = random_padd(image, padd_probability=0.8, v=0.3, padd_value=self.back_color)
     
         # random flip 
         image = random_flip(image, left_right_probability=0.5, up_down_probability=0.05)
     
         # cutout
         if random.random() < 0.8:
-            image = apply_augment(image, 'Cutout', 1)
+            image = Cutout(image, 0.2, color=self.back_color)
     
         # fix the image shape to [size, size]
         image = self._fix_shape(image)

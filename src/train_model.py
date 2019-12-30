@@ -16,6 +16,7 @@ from PIL import Image
 import tensorflow as tf
 
 from data.data_provider import data_parallel_generator, get_mini_batch
+from data.dataset_utils import load_dataset_mean_std_file, restore_normalization, restore_channel_normalization
 from utils.config_utils import load_config_file, mkdir_if_nonexist, import_model_by_networkname
 from utils.learning_rate_utils import get_learning_rate_scheduler
 from utils.optimizer_utils import get_optimizer
@@ -74,12 +75,13 @@ def main(_):
     model_save_dir = os.path.join(experiment_base_dir, 'weights')
     log_save_dir = os.path.join(experiment_base_dir, 'log')
     tensorboard_summary_dir = os.path.join(log_save_dir, 'tensorboard_summary')
+    mkdir_if_nonexist(tensorboard_summary_dir, raise_error=False)
     result_save_dir = os.path.join(experiment_base_dir, 'result')
 
-    mkdir_if_nonexist(model_save_dir, raise_error=False)
-    mkdir_if_nonexist(tensorboard_summary_dir, raise_error=False)
-    mkdir_if_nonexist(result_save_dir, raise_error=False)
-
+    # get dataset mean std info
+    mean_std_file = os.path.join(model_save_dir, 'dataset_mean_var.txt')
+    dataset_rgb_mean, dataset_rgb_std = load_dataset_mean_std_file(mean_std_file)
+    
     ckpt_max_save_num = output_paras['CKPT_MAX_SAVE_NUM']
     show_augment_data = output_paras['SHOW_AUGMENT_DATA']
     print_details_in_log = output_paras['PRINT_DETAILS_IN_LOG']
@@ -203,9 +205,8 @@ def main(_):
 
                     if show_augment_data == 1 and total_batch_num < 10:
                         for i in range(len(images)):
-                            img = images[i]
-                            img =img.astype(np.uint8)
-                            img = Image.fromarray(img)
+                            img = restore_channel_normalization(images[i], dataset_rgb_mean, dataset_rgb_std)
+                            img = Image.fromarray(img.astype(np.uint8))
                             show_img_path = str(total_batch_num) + "_" + str(i) + ".jpg"
                             img.save(os.path.join(augment_data_save_dir, show_img_path))
                         

@@ -1,0 +1,4 @@
+*.pyc
+ouput/*
+configs/getting_started/test.yaml
+output/efficientnet-b0_hx10

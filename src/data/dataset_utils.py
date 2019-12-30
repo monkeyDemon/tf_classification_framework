@@ -1,23 +1,12 @@
-# Copyright 2016 The TensorFlow Authors. All Rights Reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-#
-# modified by: zyb_as 2019/12/6
-# ==============================================================================
-"""Contains utilities for downloading and converting datasets."""
-from __future__ import absolute_import
+# -*- coding: utf-8 -*-
+"""
+Created on Tue Dec 24 10:38:13 2019
+
+Contains utilities for downloading and converting datasets.
+
+@author: cbb
+"""
 from __future__ import division
-from __future__ import print_function
 
 import os
 import io
@@ -26,60 +15,60 @@ from PIL import Image
 import tensorflow as tf
 
 
-
-def int64_feature(values):
-  """Returns a TF-Feature of int64s.
-
-  Args:
-    values: A scalar or list of values.
-
-  Returns:
-    A TF-Feature.
-  """
-  if not isinstance(values, (tuple, list)):
-    values = [values]
-  return tf.train.Feature(int64_list=tf.train.Int64List(value=values))
+def load_dataset_mean_std_file(mean_std_file):
+    print("load dataset mean & std file {}".format(mean_std_file))
+    with open(mean_std_file, 'r') as f:
+        r_mean, r_std = f.readline().rstrip().split(':')[1:] 
+        g_mean, g_std = f.readline().rstrip().split(':')[1:]
+        b_mean, b_std = f.readline().rstrip().split(':')[1:]
+    rgb_mean = [float(r_mean), float(g_mean), float(b_mean)]
+    rgb_std = [float(r_std), float(g_std), float(b_std)]
+    print("dataset RGB mean: {} {} {}".format(rgb_mean[0], rgb_mean[1], rgb_mean[2]))
+    print("dataset RGB std: {} {} {}".format(rgb_std[0], rgb_std[1], rgb_std[2]))
+    return rgb_mean, rgb_std
 
 
-def int64_list_feature(value):
-    return tf.train.Feature(int64_list=tf.train.Int64List(value=value))
+
+def normalization(image):
+    """ do normal normalization operation
+    image = (image - 128) / 128
+    image dtype: numpy.ndarray
+    """
+    image = (image - 128) / 128
+    return image
 
 
-def bytes_feature(values):
-  """Returns a TF-Feature of bytes.
-
-  Args:
-    values: A string.
-
-  Returns:
-    A TF-Feature.
-  """
-  return tf.train.Feature(bytes_list=tf.train.BytesList(value=[values]))
+def restore_normalization(image):
+    """ restore the image from normal normalization to range [0,255]
+    image dtype: numpy.ndarray float
+    """
+    image = image * 128
+    image = image + 128
+    return image
 
 
-def bytes_list_feature(value):
-    return tf.train.Feature(bytes_list=tf.train.BytesList(value=value))
+def channel_normalization(image, rgb_mean, rgb_std):
+    """ do normalization operation by channel
+    image = (image - [r, g, b]) / [r_std, g_std, b_std]
+    image dtype: numpy.ndarray
+    """
+    image = (image - rgb_mean) / rgb_std
+    return image
 
 
-def float_feature(values):
-  """Returns a TF-Feature of floats.
-
-  Args:
-    values: A scalar of list of values.
-
-  Returns:
-    A TF-Feature.
-  """
-  if not isinstance(values, (tuple, list)):
-    values = [values]
-  return tf.train.Feature(float_list=tf.train.FloatList(value=values))
-
-
-def float_list_feature(value):
-    return tf.train.Feature(float_list=tf.train.FloatList(value=value))
+def restore_channel_normalization(image, rgb_mean, rgb_std):
+    """ restore the image from channel normalization to range [0,255]
+    image dtype: numpy.ndarray float
+    """
+    image = image * rgb_std
+    image = image + rgb_mean
+    return image
 
 
 def process_image_channels(image):
+    """ make sure channel order is RGB
+    image dtype: PIL Image
+    """
     process_flag = False
     if image.mode == 'RGBA':
         # process the 4 channels .png
@@ -93,96 +82,51 @@ def process_image_channels(image):
     return image, process_flag
 
 
-def process_image_resize(image, resize):
+
+def normal_resize(image, resize):
+    """PIL Image resize
+    resize: [width, height]
+    """
     if resize is not None:
-        image = image.resize((resize[1], resize[0]), Image.ANTIALIAS)  # PIL resize order is (width, height)
+        image = image.resize((resize[0], resize[1]), Image.ANTIALIAS)  # PIL resize order is (width, height)
     return image
 
 
-def process_image_resize2(image, resize):
+def maintain_aspect_ratio_resize(image, long_edge_size):
+    """ resize and keep the original image's aspect ratio
+    image: PIL Image
+    long_edge_size: the long edge's size after resize
+    """
     width, height = image.size
-    if resize is not None:
-        if width > height:
-            height = int(height * resize[0] / width) 
-            width = resize[1]
-        else:
-            width = int(width * resize[1] / height)
-            height = resize[0]
-        image = image.resize((width, height), Image.ANTIALIAS)
+    if width > height:
+        height = int(height * long_edge_size / width)
+        width = long_edge_size
+    else:
+        width = int(width * long_edge_size / height)
+        height = long_edge_size
+    #image = image.resize((width, height), Image.ANTIALIAS)
+    image = image.resize((width, height), Image.BILINEAR)
     return image
 
 
-def get_tf_example_RGB(image_path, label):
-    image = Image.open(image_path)
-    # process pic to three channels(png has four channels and gray has one)
-    image, process_flag = process_image_channels(image)
-    # get image size: width and height
+def padding_image_square(image, padd_value=(0,0,0)):
+    """ padding the image to square 
+    image size after padding is [long_edge_size, long_edge_size]
+    image: PIL Image
+    """
     width, height = image.size
-    # get image raw data
-    bytes_io = io.BytesIO()
-    image.save(bytes_io, format='JPEG')
-    image_raw_data = bytes_io.getvalue()
-    # build tf_example
-    tf_example = tf.train.Example(
-        features=tf.train.Features(
-            feature={
-                'image/encoded': bytes_feature(image_raw_data),
-                'image/label': int64_feature(label),
-                'image/width': int64_feature(width),
-                'image/height': int64_feature(height)
-            }
-        ))
-    return tf_example 
+    long_edge_size = width if width >= height else height
+
+    img_padd = Image.new('RGB', (long_edge_size, long_edge_size), padd_value)
+    if width > height:
+        h_st = int((long_edge_size - height)/2)
+        img_padd.paste(image, (0, h_st))
+    else:
+        w_st = int((long_edge_size - width)/2)
+        img_padd.paste(image, (w_st, 0))
+    return img_padd
 
 
-def get_tf_example_RGB_RESIZE(image_path, label, resize=None):
-    image = Image.open(image_path)
-    # process pic to three channels(png has four channels and gray has one)
-    image, process_flag = process_image_channels(image)
-    # reshape image
-    image = process_image_resize(image, resize)
-    # get image raw data
-    bytes_io = io.BytesIO()
-    image.save(bytes_io, format='JPEG')
-    image_raw_data = bytes_io.getvalue()
-    # get image size: width and height
-    width, height = image.size
-    # build tf_example
-    tf_example = tf.train.Example(
-        features=tf.train.Features(
-            feature={
-                'image/encoded': bytes_feature(image_raw_data),
-                'image/label': int64_feature(label),
-                'image/width': int64_feature(width),
-                'image/height': int64_feature(height)
-            }
-        ))
-    return tf_example 
-
-
-def get_tf_example_RGB_RESIZE2(image_path, label, resize=None):
-    image = Image.open(image_path)
-    # process pic to three channels(png has four channels and gray has one)
-    image, process_flag = process_image_channels(image)
-    # reshape image
-    image = process_image_resize2(image, resize)
-    # get image raw data
-    bytes_io = io.BytesIO()
-    image.save(bytes_io, format='JPEG')
-    image_raw_data = bytes_io.getvalue()
-    # get image size: width and height
-    width, height = image.size
-    # build tf_example
-    tf_example = tf.train.Example(
-        features=tf.train.Features(
-            feature={
-                'image/encoded': bytes_feature(image_raw_data),
-                'image/label': int64_feature(label),
-                'image/width': int64_feature(width),
-                'image/height': int64_feature(height)
-            }
-        ))
-    return tf_example 
 
 
 def write_label_file(labels_to_class_names, dataset_dir,
@@ -223,3 +167,4 @@ def read_label_file(label_file_path):
     index = line.index(':')
     labels_to_class_names[int(line[:index])] = line[index+1:]
   return labels_to_class_names
+

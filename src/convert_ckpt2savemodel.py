@@ -21,7 +21,7 @@ from tensorflow_serving.apis import prediction_log_pb2
 from tensorflow_serving.apis import regression_pb2
 
 from utils.config_utils import load_config_file, mkdir_if_nonexist, import_model_by_networkname
-
+from data import dataset_utils
 
 flags = tf.app.flags
 flags.DEFINE_string('action', None, 'command action: print or convert')
@@ -31,7 +31,43 @@ FLAGS = flags.FLAGS
 
 
 
+# old function
+#def prepareImage(image, config_dict):
+#
+#    # 定义预处理方法
+#    # 这样部署后，只需直接传入base64的string即可直接得到结果
+#    img_decoded = tf.image.decode_png(image, channels=3)
+#    #img_decoded = tf.image.decode_jpeg(image, channels=3)
+#
+#    # 与本demo一致的tensor版本预处理，保持长宽比将长边resize到224，然后padding到224*224
+#    shape = tf.shape(img_decoded)
+#    height = tf.to_float(shape[0])
+#    width = tf.to_float(shape[1])
+#    image_size = config_dict['DATASET']['IMAGE_SIZE']
+#    scale = tf.cond(tf.greater(height, width),
+#                    lambda: image_size / height,
+#                    lambda: image_size / width)
+#    new_height = tf.to_int32(tf.rint(height * scale))
+#    new_width = tf.to_int32(tf.rint(width * scale))
+#    resized_image = tf.image.resize_images(img_decoded, [new_height, new_width], method=tf.image.ResizeMethod.BILINEAR)
+#    padd_image = tf.image.resize_image_with_crop_or_pad(resized_image, image_size, image_size)
+#    padd_image = tf.cast(padd_image, tf.uint8)
+#    return padd_image
+
+
+
 def prepareImage(image, config_dict):
+    # get preprocess info
+    image_size = config_dict['DATASET']['IMAGE_SIZE']
+
+    # get dataset mean std info
+    output_paras = config_dict['OUTPUT']
+    experiment_base_dir = os.path.join(output_paras['OUTPUT_SAVE_DIR'], output_paras['EXPERIMENT_NAME'])
+    model_save_dir = os.path.join(experiment_base_dir, 'weights')
+    mean_std_file = os.path.join(model_save_dir, 'dataset_mean_var.txt')
+    dataset_rgb_mean, dataset_rgb_std = dataset_utils.load_dataset_mean_std_file(mean_std_file)
+    r_mean, g_mean, b_mean = dataset_rgb_mean
+    r_std, g_std, b_std = dataset_rgb_std
 
     # 定义预处理方法
     # 这样部署后，只需直接传入base64的string即可直接得到结果
@@ -42,22 +78,24 @@ def prepareImage(image, config_dict):
     shape = tf.shape(img_decoded)
     height = tf.to_float(shape[0])
     width = tf.to_float(shape[1])
-    image_size = config_dict['DATASET']['IMAGE_SIZE']
     scale = tf.cond(tf.greater(height, width),
                     lambda: image_size / height,
                     lambda: image_size / width)
     new_height = tf.to_int32(tf.rint(height * scale))
     new_width = tf.to_int32(tf.rint(width * scale))
     resized_image = tf.image.resize_images(img_decoded, [new_height, new_width], method=tf.image.ResizeMethod.BILINEAR)
-    padd_image = tf.image.resize_image_with_crop_or_pad(resized_image, image_size, image_size)
-    padd_image = tf.cast(padd_image, tf.uint8)
-    return padd_image
 
-    # 另一个预处理示例，与本demo无关
-    #g_img_mean = np.array([[[116.79, 116.28, 103.53]] * 57] * 57)
-    #img_centered = tf.subtract(img_decoded, g_img_mean)
-    #img_bgr = img_centered[:, :, ::-1]
-    #img_bgr = tf.cast(img_bgr,dtype=tf.float32) 
+    # normalization
+    R = tf.ones([new_height, new_width, 1], dtype=tf.float32) * r_mean
+    G = tf.ones([new_height, new_width, 1], dtype=tf.float32) * g_mean
+    B = tf.ones([new_height, new_width, 1], dtype=tf.float32) * b_mean
+    rgb_img_mean = tf.concat([R,G,B], axis=2)
+    img_centered = tf.subtract(resized_image, rgb_img_mean)
+    img_normalize = tf.divide(img_centered, [r_std, g_std, b_std])
+    #img_normalize = tf.cast(img_normalize, dtype=tf.float32) 
+    
+    padd_image = tf.image.resize_image_with_crop_or_pad(img_normalize, image_size, image_size)
+    return padd_image
 
 
 
@@ -99,10 +137,8 @@ def freeze_graph(ckpt_path, savemodel_save_dir, Model, config_dict):
 
         images = tf.placeholder(tf.string, name="images")
         images_rank = tf.cond(tf.less(tf.rank(images), 1), lambda: tf.expand_dims(images, 0), lambda: images)
-        #orignal_inputs = tf.map_fn(prepareImage, images_rank, dtype=tf.uint8)
-        orignal_inputs = tf.map_fn(fn=lambda inp: prepareImage(inp, config_dict), elems=images_rank, dtype=tf.uint8)
+        orignal_inputs = tf.map_fn(fn=lambda inp: prepareImage(inp, config_dict), elems=images_rank, dtype=tf.float32)
 
-    
         # init network
         model = Model(config_dict)
     
@@ -159,10 +195,12 @@ def build_warmup_data(savemodel_dir, config_dict):
     serving_batch = config_dict['SERVING']['SERVE_BATCH']
     model_spec_name = config_dict['SERVING']['NAME']
 
-    trainset_root_dir = config_dict['DATASET']['DATASET_ROOT_DIR']
     output_paras = config_dict['OUTPUT']
-    model_save_dir = os.path.join(output_paras['MODEL_SAVE_DIR'], output_paras['EXPERIMENT_NAME'])
+    experiment_base_dir = os.path.join(output_paras['OUTPUT_SAVE_DIR'], output_paras['EXPERIMENT_NAME'])
+    model_save_dir = os.path.join(experiment_base_dir, 'weights')
+
     label_file = os.path.join(model_save_dir, 'labels.txt')
+    trainset_root_dir = config_dict['DATASET']['DATASET_ROOT_DIR']
     warmup_data_dir = _get_warmup_data_dir(trainset_root_dir, label_file)
 
     assets_extra_dir = os.path.join(savemodel_dir, 'assets.extra')
@@ -219,10 +257,10 @@ def main(_):
 
     # output parameters
     output_paras = config_dict['OUTPUT']
-    ckpt_save_dir = os.path.join(output_paras['MODEL_SAVE_DIR'], output_paras['EXPERIMENT_NAME'])  # Path to the model.ckpt-(num_steps) will be saved
+    experiment_base_dir = os.path.join(output_paras['OUTPUT_SAVE_DIR'], output_paras['EXPERIMENT_NAME'])
+    ckpt_save_dir = os.path.join(experiment_base_dir, 'weights')
     
     ckpt_path = _get_ckpt_path(ckpt_save_dir, ckpt_idx)
-    #ckpt_path = tf.train.latest_checkpoint(ckpt_save_dir)
 
     savemodel_save_dir = os.path.join(ckpt_save_dir, 'savemodel_base64')  
     mkdir_if_nonexist(savemodel_save_dir, raise_error=False)
@@ -231,7 +269,7 @@ def main(_):
 
     # import model by network_name
     network_name = config_dict['MODEL']['NETWORK_NAME']
-    import_str = import_model_by_networkname(network_name)
+    import_str = import_model_by_networkname(network_name)  # after this line, you can use Model
     exec(import_str)
 
     if FLAGS.action == 'print':

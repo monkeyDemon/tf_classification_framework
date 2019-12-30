@@ -51,7 +51,7 @@ def random_crop(image, crop_probability=0.8, v=0.125):
 
 
 # random padding
-def random_padd(image, padd_probability=0.8, v=0.125):
+def random_padd(image, padd_probability=0.8, v=0.125, padd_value=(0,0,0)):
     if random.random() > padd_probability:
         return image
 
@@ -63,7 +63,7 @@ def random_padd(image, padd_probability=0.8, v=0.125):
     new_height = int(height * intensity)
 
     # padding
-    back_image = PIL.Image.new('RGB', (new_width, new_height), (0, 0, 0))
+    back_image = PIL.Image.new('RGB', (new_width, new_height), padd_value)
     h_st = int((new_height - height)/2)
     w_st = int((new_width - width)/2)
     
@@ -186,7 +186,7 @@ def Sharpness(img, v):  # [0.1,1.9]
     return PIL.ImageEnhance.Sharpness(img).enhance(v)
 
 
-def Cutout(img, v):  # [0, 60] => percentage: [0, 0.2]
+def Cutout(img, v, color=(125, 123, 114)):  # [0, 60] => percentage: [0, 0.2]
     assert 0.0 <= v <= 0.2
     if v <= 0.:
         return img
@@ -194,14 +194,10 @@ def Cutout(img, v):  # [0, 60] => percentage: [0, 0.2]
     width, height = img.size
     max_edge = width if width > height else height
     v = v * max_edge
-    #if width > height:
-    #    v = v * height
-    #else:
-    #    v = v * width
-    return CutoutAbs(img, v)
+    return CutoutAbs(img, v, color)
 
 
-def CutoutAbs(img, v):  # [0, 60] => percentage: [0, 0.2]
+def CutoutAbs(img, v, color):  # [0, 60] => percentage: [0, 0.2]
     # assert 0 <= v <= 20
     if v < 0:
         return img
@@ -215,8 +211,6 @@ def CutoutAbs(img, v):  # [0, 60] => percentage: [0, 0.2]
     y1 = min(h, y0 + v)
 
     xy = (x0, y0, x1, y1)
-    color = (125, 123, 114)
-    # color = (0, 0, 0)
     img = img.copy()
     PIL.ImageDraw.Draw(img).rectangle(xy, color)
     return img

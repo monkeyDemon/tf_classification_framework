@@ -79,11 +79,11 @@ class EfficientNetModel(object):
     def build_model(self, inputs, labels, is_training, reuse=False):
         """ Graph Input """
 
-        # preprocess
-        preprocessed_inputs = self.preprocess(inputs)
+        ## preprocess
+        #preprocessed_inputs = self.preprocess(inputs)
         
         # inference
-        self.logits = self.inference(preprocessed_inputs, is_training=is_training, reuse=reuse)
+        self.logits = self.inference(inputs, is_training=is_training, reuse=reuse)
 
         # prediction (this op is important when final use, record the op_name)
         self.predictions = tf.nn.softmax(self.logits, name='score_list')
@@ -108,14 +108,14 @@ class EfficientNetModel(object):
         self.show_all_variables()
 
 
-    def preprocess(self, inputs):
-        ''' preprocess
-        here, we assuming that the size of the input image is correct 
-        '''
-        preprocessed_inputs = tf.to_float(inputs)
-        preprocessed_inputs = tf.subtract(preprocessed_inputs, 128)
-        preprocessed_inputs = tf.div(preprocessed_inputs, 128)
-        return preprocessed_inputs
+    #def preprocess(self, inputs):
+    #    ''' preprocess
+    #    here, we assuming that the size of the input image is correct 
+    #    '''
+    #    preprocessed_inputs = tf.to_float(inputs)
+    #    preprocessed_inputs = tf.subtract(preprocessed_inputs, 128)
+    #    preprocessed_inputs = tf.div(preprocessed_inputs, 128)
+    #    return preprocessed_inputs
     
 
     def inference(self, x, is_training=True, reuse=False):
