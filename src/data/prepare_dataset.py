@@ -36,6 +36,7 @@ sys.stdout.flush()
 
 reshape_size = config_dict['DATASET']['IMAGE_SIZE']
 src_dir = config_dict['DATASET']['DATASET_ROOT_DIR']
+use_channel_normalization = config_dict['DATASET']['USE_CHANNEL_NORMALIZATION'] 
 
 output_paras = config_dict['OUTPUT']
 experiment_base_dir = os.path.join(output_paras['OUTPUT_SAVE_DIR'], output_paras['EXPERIMENT_NAME'])
@@ -125,19 +126,27 @@ for root, dirs, files in os.walk(src_dir):
             print('Error occured!', file_name)
             sys.stdout.flush()
 
-# compute dataset channel mean and std
-rgb_list = np.array(rgb_list)
-r_mean = np.mean(rgb_list[:,2])
-g_mean = np.mean(rgb_list[:,1])
-b_mean = np.mean(rgb_list[:,0])
-r_std = np.std(rgb_list[:,2])
-g_std = np.std(rgb_list[:,1])
-b_std = np.std(rgb_list[:,0])
-mean_var_file = os.path.join(model_save_dir, 'dataset_mean_var.txt')
-with open(mean_var_file, 'w') as writer:
-    writer.write("R_mean_std:" + str(r_mean) + ':' + str(r_std) + '\n')
-    writer.write("G_mean_std:" + str(g_mean) + ':' + str(g_std) + '\n')
-    writer.write("B_mean_std:" + str(b_mean) + ':' + str(b_std) + '\n')
+
+if use_channel_normalization == 0:
+    mean_var_file = os.path.join(model_save_dir, 'dataset_mean_var.txt')
+    with open(mean_var_file, 'w') as writer:
+        writer.write("R_mean_std:" + str(128) + ':' + str(128) + '\n')
+        writer.write("G_mean_std:" + str(128) + ':' + str(128) + '\n')
+        writer.write("B_mean_std:" + str(128) + ':' + str(128) + '\n')
+else:
+    # compute dataset channel mean and std
+    rgb_list = np.array(rgb_list)
+    r_mean = np.mean(rgb_list[:,2])
+    g_mean = np.mean(rgb_list[:,1])
+    b_mean = np.mean(rgb_list[:,0])
+    r_std = np.std(rgb_list[:,2])
+    g_std = np.std(rgb_list[:,1])
+    b_std = np.std(rgb_list[:,0])
+    mean_var_file = os.path.join(model_save_dir, 'dataset_mean_var.txt')
+    with open(mean_var_file, 'w') as writer:
+        writer.write("R_mean_std:" + str(r_mean) + ':' + str(r_std) + '\n')
+        writer.write("G_mean_std:" + str(g_mean) + ':' + str(g_std) + '\n')
+        writer.write("B_mean_std:" + str(b_mean) + ':' + str(b_std) + '\n')
 
 
 print('finish')
