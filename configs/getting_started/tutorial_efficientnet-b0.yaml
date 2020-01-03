@@ -2,54 +2,62 @@ MODEL:
   NETWORK_NAME: efficientnet-b0
   NUM_CLASSES: 2
 GPU_OPTIONS:
-  GPU_DEVICES: 6
+  GPU_DEVICES: 1
 SOLVER:
-  MAX_EPOCH_NUMS: 21
-  OPTIMIZER: adam                       # momentum or adam 
-  LR_POLICY: steps_with_decay           # steps_with_decay, noise_labels_filter
-  BASE_LR: 0.0001
+  MAX_EPOCH_NUMS: 100
+  LR_POLICY: cosine_decay               # options: (steps_decay, noise_filter, cosine_decay)
   POLICY_STEPS_DECAY:
+    BASE_LR: 0.0001
     LR_DECAY_FACTOR: 0.1                # Learning rate decay factor.
-    EPOCHS_PER_DECAY: 10                # Number of epochs that learning rate decays.
+    EPOCHS_PER_DECAY: 15                # Number of epochs that learning rate decays.
   POLICY_NOISE_FILTER:
+    BASE_LR: 0.0001
     FIXED_EPOCH: 1
     MAX_LR: 0.1
     MIN_LR: 0.0001
     DOUBT_SAVE_NUM: 100                 # Save the first DOUBT_SAVE_NUM images most likely to be noise samples
-  MOMENTUM: 0.5                         # set the momentum parameter(if use momentum optimizer)
+  POLICY_COSINE_DECAY:                  # cosine decay lr
+    BASE_LR: 0.1
+  OPTIMIZER: momentum                   # options: (momentum, adam)
+  OPTIMIZER_ADAM:  
+    BETA1: 0.9
+    BETA2: 0.999
+  OPTIMIZER_MOMENTUM:
+    MOMENTUM: 0.9                        
+    USE_NESTEROV: 1
 TRAIN:
   TRAIN_MODE: finetune_on_imagenet
   # TRAIN_MODE: train_from_scratch, finetune_on_imagenet or continue_training
   # 'train_from_scratch' means train from scratch without pretrained model(can be used to train a imagenet pretrained model).
   # 'finetune_on_imagenet' means fine tune on imagenet pretrained model(rebuild the last fully connection layer).
   # 'continue_training' means continue training on previous model(without any structure change).
-  PRETRAIN_WEIGHTS: /new_train_data/ansheng/model_zoo/tf_pretrained_model/efficientnet-b0/model.ckpt    # path of the ckpt pretrained file/model.ckpt
+  PRETRAIN_WEIGHTS: path of model_zoo/tf_pretrained_model/efficientnet-b0/model.ckpt    # path of the ckpt pretrained file/model.ckpt
   LOSS: cross_entropy
   # choose the loss you want to use. 
   # current support 'cross_entropy' and 'focal_loss'
-  BATCH_SIZE: 32
+  BATCH_SIZE: 64
   MONITOR: accuracy
   # Monitoring indicators to determine whether to save the new model. choose 'accuracy' or 'loss'
   REGULAR_LOSS_WEIGHT: 0                # the weight of regular loss. total_loss = predict_loss + weight * regular_loss
 DATASET:
   DATASET_ROOT_DIR: .../dataset         #path of the dataset root direcory
   # DATASET_ROOT_DIR containing a set of subdirectories representing class names. Each subdirectory should contain PNG or JPG encoded images.
-  IMAGE_SIZE: 224                       # image size: [height, width]
+  IMAGE_SIZE: 160                       # image size: [height, width]
   TRAIN_DATA_PROPORTION: 0.9            # The number of shards per dataset split, also determine the ratio of train and validation set
   DATASET_RANDOM_SEED: 0                # Seed for repeatability.
   MAX_SAMPLE_PER_CLASS: -1              # max sample number for per category, set -1 to no use this parameter(please only use -1, other value has bug now)
   AUGMENT_METHOD: baseline              # the augmentation method to use: now can use 'baseline', 'general1' or 'none'
-  DATA_WORKERS: 4
-  USE_CHANNEL_NORMALIZATION: 1          # use channel mean to do normalization or just img = (img - 128) / 128
+  DATA_WORKERS: 15
+  USE_CHANNEL_NORMALIZATION: 0          # use channel mean to do normalization or just img = (img - 128) / 128
 OUTPUT:
   OUTPUT_SAVE_DIR: output
-  EXPERIMENT_NAME: efficientnet-b0_hx5
-  CKPT_MAX_SAVE_NUM: 3                  # Max number of ckpt model to keep
+  EXPERIMENT_NAME: efficientnet-b0
+  CKPT_MAX_SAVE_NUM: 3                 # Max number of ckpt model to keep
   SHOW_AUGMENT_DATA: 1
-  PRINT_DETAILS_IN_LOG: 1               # print the batch predict details in log file or not, use 1 or 0
+  PRINT_DETAILS_IN_LOG: 1              # print the batch predict details in log file or not, use 1 or 0
 SERVING:
-  SERVE_BATCH: 8                        # batch num when deploy tf-serving
-  NAME: porndetect                      # name of the serving
+  SERVE_BATCH: 8                       # batch num when deploy tf-serving
+  NAME: classification                 # name of the serving
 TRICKS:
   MOVING_AVERAGE_DECAY: -1
   # moving average decay, set -1 when don't want to use ExponentialMovingAverage
