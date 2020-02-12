@@ -95,7 +95,9 @@ def main(_):
     
     # import model by network_name
     import_str = import_model_by_networkname(network_name)
-    exec(import_str)
+    scope = {}
+    exec(import_str, scope)
+    Model = scope['Model']
     
 
     # create placeholders
