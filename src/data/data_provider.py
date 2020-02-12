@@ -16,7 +16,7 @@ import traceback
 import numpy as np
 import multiprocessing
 
-import dataset_utils
+import data.dataset_utils as dataset_utils
 from data.data_augmentation import *
 
 
@@ -361,7 +361,7 @@ def get_mini_batch(datagen, num_workers = 4, queue_max_size = 8):
     share_dict = m.dict()
     share_dict['batch_idx'] = 0
     share_dict['steps_per_epoch'] = steps_per_epoch
-    for _ in xrange(num_workers):
+    for _ in range(num_workers):
         proc = multiprocessing.Process(target=generate_proc, args=(batch_queue, generator, lock, share_dict))
         proc.start()
 
