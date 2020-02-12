@@ -18,7 +18,7 @@ def load_config_file(yaml_file):
     print("The configuration is as follows:")
     print(file_data)
     file.close()
-    config_dict = yaml.load(file_data)
+    config_dict = yaml.load(file_data, Loader=yaml.FullLoader)
     return config_dict
 
 
