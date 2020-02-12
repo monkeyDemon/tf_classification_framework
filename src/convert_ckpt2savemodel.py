@@ -12,6 +12,7 @@ convert ckpt to savemodel format pb
 @author: as
 """
 import os
+import platform
 import tensorflow as tf
 from tensorflow_serving.apis import classification_pb2
 from tensorflow_serving.apis import inference_pb2
@@ -267,10 +268,17 @@ def main(_):
     savemodel_save_dir = os.path.join(savemodel_save_dir, '1')
     mkdir_if_nonexist(savemodel_save_dir, raise_error=False)
 
-    # import model by network_name
+    # import model by network_name, after that use can use Model
     network_name = config_dict['MODEL']['NETWORK_NAME']
-    import_str = import_model_by_networkname(network_name)  # after this line, you can use Model
-    exec(import_str)
+    import_str = import_model_by_networkname(network_name)
+
+    python_version = platform.python_version()
+    if python_version.startswith('2.'):
+        exec(import_str)  # python 2
+    else:
+        namespace = {}
+        exec(import_str, namespace) 
+        Model = namespace['Model']
 
     if FLAGS.action == 'print':
         print_op_names(ckpt_path)

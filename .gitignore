@@ -2,3 +2,10 @@
 ouput/*
 configs/getting_started/test.yaml
 output/efficientnet-b0_hx10
+configs/getting_started/test_hx10-2.yaml
+configs/getting_started/test_hx9-2.yaml
+configs/getting_started/test_hx9-3.yaml
+dataset/*
+output/efficientnet-b0_hx10-2/
+output/efficientnet-b0_hx9_2/
+output/efficientnet-b0_hx9_3/
