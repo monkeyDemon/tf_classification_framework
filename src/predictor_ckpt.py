@@ -122,7 +122,9 @@ class Predictor(object):
         model_name = config_dict['MODEL']['NETWORK_NAME']
         image_size = config_dict['DATASET']['IMAGE_SIZE']
         import_str = import_model_by_networkname(model_name)
-        exec(import_str)
+        scope = {}
+        exec(import_str, scope)
+        Model = scope['Model']
 
 
         ema_decay = config_dict['TRICKS']['MOVING_AVERAGE_DECAY']   # TODO: 有变化 'False' to 0.9

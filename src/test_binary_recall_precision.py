@@ -2,10 +2,11 @@
 """
 Created on Tue Nov  6 15:35:27 2018
 
-一个二分类问题的多功能性能测试程序demo
+一个二分类问题的多功能性能测试demo
 
-与predict_img_dir.py仅仅对指定目录下图像进行预测不同
 recall_precision_test.py会对模型进行准召测试
+保存误判的图片用于分析
+给出指定阈值时的准确率和召回率
 绘制准召变化曲线，计算曲线下面积
 从多个角度为模型比较和选择提供参考
 
@@ -15,8 +16,10 @@ from __future__ import print_function, division
 import os
 import cv2
 import sys
+import PIL
 import glob
 import shutil
+import traceback
 import numpy as np
 import tensorflow as tf
 import matplotlib.pyplot as plt
@@ -24,12 +27,14 @@ plt.switch_backend('agg')
 
 import predictor_pb
 import predictor_ckpt
+import data.dataset_utils as dataset_utils
 from utils.config_utils import load_config_file, mkdir_if_nonexist, import_model_by_networkname
 
 
 flags = tf.app.flags
 flags.DEFINE_string('config_path', '', 'path of the config file.')
 flags.DEFINE_string('weight_mode', 'ckpt', 'type of the weight file')
+flags.DEFINE_integer('positive_label_index', 0, 'index of the positive label, see labels.txt to check')
 flags.DEFINE_string('positive_img_dir', ' ',
                     'Path to positive images (directory).')
 flags.DEFINE_string('negative_img_dir', ' ',
@@ -38,67 +43,59 @@ flags.DEFINE_float('threshold', 0.8, 'threshold used to compute the recall and p
 FLAGS = flags.FLAGS
 
 
-# TODO: 针对不同问题，预测函数需要进行简单修改，下面是两个示例
-def detect(predictor, image_path, threshold):
-    image_src = cv2.imread(image_path)
-    # use different strategy for different size
-    shape = image_src.shape
-    if shape[0] <= 60 or shape[1] <= 60:
-        is_hit = False  # ignore small image
-        pred_label = [1, 0]
-    else:
-        image = cv2.cvtColor(image_src, cv2.COLOR_BGR2RGB)
-        image = cv2.resize(image, (224,224), interpolation=cv2.INTER_CUBIC)
-        pred_label = predictor.predict([image])[0]
-        is_hit = True if pred_label[1] > threshold else False
-    score = pred_label[1]
-    return is_hit, score
+## TODO: 针对不同问题，预测函数需要进行简单修改，下面是两个示例
+#def detect(predictor, image_path, threshold):
+#    image_src = cv2.imread(image_path)
+#    # use different strategy for different size
+#    shape = image_src.shape
+#    if shape[0] <= 60 or shape[1] <= 60:
+#        is_hit = False  # ignore small image
+#        pred_label = [1, 0]
+#    else:
+#        image = cv2.cvtColor(image_src, cv2.COLOR_BGR2RGB)
+#        image = cv2.resize(image, (224,224), interpolation=cv2.INTER_CUBIC)
+#        pred_label = predictor.predict([image])[0]
+#        is_hit = True if pred_label[1] > threshold else False
+#    score = pred_label[1]
+#    return is_hit, score
 
 
-def detect2(predictor, image_path, threshold):
-    image_src = cv2.imread(image_path)
-    # use different strategy for different size
-    shape = image_src.shape
-    width = shape[1]
-    height = shape[0]
+def detect(predictor, image_path, threshold, other_params):
 
-    if len(shape) == 2:
-        image = cv2.cvtColor(image_src, cv2.COLOR_GRAY2RGB)
-    else:
-        image = cv2.cvtColor(image_src, cv2.COLOR_BGR2RGB)
-    
+    back_color = other_params['back_color']
+    dataset_rgb_mean = other_params['dataset_rgb_mean']
+    dataset_rgb_std = other_params['dataset_rgb_std']
+    positive_label_index = other_params['positive_label_index']
+
+    img = PIL.Image.open(image_path, 'r')
+
+    # make sure channel order is RGB
+    img, _ = dataset_utils.process_image_channels(img)
+
     # resize(maintain aspect ratio) 
-    long_edge_size = 160
-    if width > height:
-        height = int(height * long_edge_size / width)
-        width = long_edge_size
-    else:
-        width = int(width * long_edge_size / height)
-        height = long_edge_size
-    image = cv2.resize(image, (width, height), interpolation=cv2.INTER_CUBIC)
+    long_edge_size = params['image_size']
+    img = dataset_utils.maintain_aspect_ratio_resize(img, long_edge_size)
 
     # padding
-    preprocess_image = np.zeros((long_edge_size, long_edge_size, 3))
-    if width > height:
-        st = int((long_edge_size - height)/2)
-        ed = st + height
-        preprocess_image[st:ed,:,:] = image
-    else:
-        st = int((long_edge_size - width)/2)
-        ed = st + width
-        preprocess_image[:,st:ed,:] = image
+    img = dataset_utils.padding_image_square(img, back_color)
 
-    # predict
+    # convert PIL 2 numpy
+    img = np.array(img)
+
+    # normalization
+    preprocess_image = dataset_utils.channel_normalization(img, dataset_rgb_mean, dataset_rgb_std)
+
+    # inference
     pred_label = predictor.predict([preprocess_image])[0]
-    is_hit = True if pred_label[0] > threshold else False
-    score = pred_label[0]
+    is_hit = True if pred_label[positive_label_index] > threshold else False
+    score = pred_label[positive_label_index]
     return is_hit, score
-
 
 
 if __name__ == "__main__":    
 
     weight_mode = FLAGS.weight_mode
+    positive_label_index = FLAGS.positive_label_index
     positive_img_dir = FLAGS.positive_img_dir
     negative_img_dir = FLAGS.negative_img_dir
     threshold = FLAGS.threshold
@@ -107,11 +104,12 @@ if __name__ == "__main__":
     config_dict = load_config_file(config_path)
 
     output_paras = config_dict['OUTPUT']
-    output_dir = os.path.join(output_paras['TEST_RESULT_SAVE_DIR'], output_paras['EXPERIMENT_NAME'])
+    experiment_dir = os.path.join(output_paras['OUTPUT_SAVE_DIR'], output_paras['EXPERIMENT_NAME'])
+    output_dir = os.path.join(experiment_dir, 'result/test_binary_rp')
     mkdir_if_nonexist(output_dir, raise_error=False)
 
     weight_path = ""
-    model_save_dir = os.path.join(output_paras['MODEL_SAVE_DIR'], output_paras['EXPERIMENT_NAME'])
+    model_save_dir = os.path.join(experiment_dir, 'weights')
     if weight_mode == 'ckpt':
         weight_path = tf.train.latest_checkpoint(model_save_dir)
         #predictor = get_predictor(weight_path, config_dict)
@@ -124,6 +122,16 @@ if __name__ == "__main__":
     elif weight_mode == 'trt':
         print("wait to finish")
     
+    params = {}
+    # image_size
+    params['image_size'] = config_dict['DATASET']['IMAGE_SIZE']
+    # get dataset mean std info
+    mean_std_file = os.path.join(model_save_dir, 'dataset_mean_var.txt')
+    params['dataset_rgb_mean'], params['dataset_rgb_std'] = dataset_utils.load_dataset_mean_std_file(mean_std_file)
+    # set back color
+    params['back_color'] = tuple([int(x) for x in params['dataset_rgb_mean']])
+    # positive_label_index
+    params['positive_label_index'] = positive_label_index
     
     
     # compute recall & precision
@@ -154,13 +162,15 @@ if __name__ == "__main__":
                 sys.stdout.flush()
             image_path = os.path.join(root, filename)
             try:
-                is_hit, score = detect2(predictor, image_path, threshold)
+                is_hit, score = detect(predictor, image_path, threshold, params)
                 pos_evaluation_list.append(score)
-            except Exception,e:
-                print("error occur: {}".format(repr(e)))
+            except:
+                print(traceback.format_exc())
                 continue
             if(is_hit == False):
+                print("FN +1")
                 shutil.copy(image_path, recall_mis_save_path + str(score) + '_' + filename)
+                #shutil.move(image_path, recall_mis_save_path + filename)
                 FN_count += 1
             else:
                 #shutil.copy(image_path, true_detect_save_path + str(score) + '_' + filename)
@@ -178,13 +188,15 @@ if __name__ == "__main__":
                 sys.stdout.flush()
             image_path = os.path.join(root, filename)
             try:
-                is_hit, score = detect2(predictor, image_path, threshold)
+                is_hit, score = detect(predictor, image_path, threshold, params)
                 neg_evaluation_list.append(score)
-            except Exception,e:
-                print("error occur: {}".format(repr(e)))
+            except:
+                print(traceback.format_exc())
                 continue
             if(is_hit == True):
+                print("FP +1")
                 shutil.copy(image_path, false_detect_save_path + str(score) + '_' + filename)
+                #shutil.move(image_path, false_detect_save_path + filename)
                 FP_count += 1
             else:
                 TN_count += 1    
