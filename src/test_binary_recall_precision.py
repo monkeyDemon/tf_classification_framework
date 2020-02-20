@@ -166,6 +166,7 @@ if __name__ == "__main__":
                 pos_evaluation_list.append(score)
             except:
                 print(traceback.format_exc())
+                os.remove(image_path)
                 continue
             if(is_hit == False):
                 print("FN +1")
@@ -192,6 +193,7 @@ if __name__ == "__main__":
                 neg_evaluation_list.append(score)
             except:
                 print(traceback.format_exc())
+                os.remove(image_path)
                 continue
             if(is_hit == True):
                 print("FP +1")
