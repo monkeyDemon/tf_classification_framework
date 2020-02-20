@@ -120,6 +120,7 @@ class Predictor(object):
             gpu_index: The GPU index to be used. Default None.
         """
         model_name = config_dict['MODEL']['NETWORK_NAME']
+        num_classes = config_dict['MODEL']['NUM_CLASSES']
         image_size = config_dict['DATASET']['IMAGE_SIZE']
         import_str = import_model_by_networkname(model_name)
         scope = {}
@@ -147,7 +148,7 @@ class Predictor(object):
             sess = tf.Session(config = config)
             with sess.as_default():
                 inputs = tf.placeholder(tf.float32, shape=[None, image_size, image_size, 3], name='inputs')
-                labels = tf.placeholder(tf.float32, shape=[None, 2], name='labels')
+                labels = tf.placeholder(tf.float32, shape=[None, num_classes], name='labels')
                 #is_training = tf.placeholder(tf.bool, name='is_training')  # no use for efficientnet but need
 
                 model = Model(config_dict)
