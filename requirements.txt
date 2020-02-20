@@ -1,0 +1,5 @@
+cv2
+shyaml
+Pillow==6.2.1
+pandas
+tensorflow-gpu==1.14
