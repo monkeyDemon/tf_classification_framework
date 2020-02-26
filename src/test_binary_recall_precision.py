@@ -40,6 +40,7 @@ flags.DEFINE_string('positive_img_dir', ' ',
 flags.DEFINE_string('negative_img_dir', ' ',
                     'Path to negative images (directory).')
 flags.DEFINE_float('threshold', 0.8, 'threshold used to compute the recall and precision.')
+flags.DEFINE_integer('ckpt_idx', -1, 'index of checkpoint to use')
 FLAGS = flags.FLAGS
 
 
@@ -92,6 +93,21 @@ def detect(predictor, image_path, threshold, other_params):
     return is_hit, score
 
 
+def _get_ckpt_path(ckpt_save_dir, ckpt_idx):
+    if ckpt_idx == -1: 
+        # use the lastest model
+        ckpt_path = tf.train.latest_checkpoint(ckpt_save_dir)
+        return ckpt_path
+
+    for file_name in os.listdir(ckpt_save_dir):
+        if file_name.endswith('data-00000-of-00001'):
+            epoch_idx = int(file_name.split('epoch')[1].split('.')[0])
+            if ckpt_idx == epoch_idx:
+                ckpt_name = file_name.split('.data-00000-of-00001')[0]
+                ckpt_path = os.path.join(ckpt_save_dir, ckpt_name)
+                return ckpt_path
+    raise RuntimeError("Not found ckpt")
+
 if __name__ == "__main__":    
 
     weight_mode = FLAGS.weight_mode
@@ -99,6 +115,7 @@ if __name__ == "__main__":
     positive_img_dir = FLAGS.positive_img_dir
     negative_img_dir = FLAGS.negative_img_dir
     threshold = FLAGS.threshold
+    ckpt_idx = FLAGS.ckpt_idx
 
     config_path = FLAGS.config_path
     config_dict = load_config_file(config_path)
@@ -111,7 +128,7 @@ if __name__ == "__main__":
     weight_path = ""
     model_save_dir = os.path.join(experiment_dir, 'weights')
     if weight_mode == 'ckpt':
-        weight_path = tf.train.latest_checkpoint(model_save_dir)
+        weight_path =  _get_ckpt_path(model_save_dir, ckpt_idx)
         #predictor = get_predictor(weight_path, config_dict)
         predictor = predictor_ckpt.Predictor(weight_path, config_dict)
     elif weight_mode == 'pb':

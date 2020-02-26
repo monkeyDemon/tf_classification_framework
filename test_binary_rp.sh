@@ -10,6 +10,7 @@ positive_label_index=1 # index of the positive label, see labels.txt to check
 positive_img_dir='path of the positive test image directory'
 negative_img_dir='path of the negative test image directory'
 threshold=0.5
+ckpt_idx=-1
 
 
 output_save_dir=$(cat ${config_path} | shyaml get-value OUTPUT.OUTPUT_SAVE_DIR)
@@ -36,5 +37,6 @@ nohup python src/test_binary_recall_precision.py \
     --positive_img_dir $positive_img_dir \
     --negative_img_dir $negative_img_dir \
     --threshold $threshold \
+    --ckpt_idx $ckpt_idx \
     > ${log_file} 2>&1 &
 echo "test start..."
