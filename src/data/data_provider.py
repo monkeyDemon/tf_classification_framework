@@ -202,7 +202,6 @@ class data_parallel_generator():
         return batch_paths, batch_images, batch_labels 
 
 
-
     def _process_single_img(self, img_path):
         img = PIL.Image.open(img_path, 'r')
 
@@ -214,8 +213,10 @@ class data_parallel_generator():
                 img = self._fix_shape(img)
             elif self.augment_method == 'baseline':
                 img = self._do_augment_baseline(img)
-            elif self.augment_method == 'general1': 
-                img = self._do_augment_general1(img)
+            elif self.augment_method == 'customize1': 
+                img = self._do_augment_customize1(img)
+            elif self.augment_method == 'customize2': 
+                img = self._do_augment_customize2(img)
             else:
                 raise RuntimeError("use unknown value of parameter AUGMENT_METHOD")
         else:
@@ -241,8 +242,49 @@ class data_parallel_generator():
         return img_padd
 
 
-    def _do_augment_general1(self, image):
 
+    def _do_augment_baseline(self, image):
+        long_edge_size = self.image_size
+        # cutout
+        if random.random() < 0.8:
+            image = Cutout(image, 0.2, color=self.back_color)
+        # fix the image shape to [size, size]
+        image = self._fix_shape(image)
+        # random crop with padding
+        image = random_crop_with_padd(image, int(long_edge_size*0.05), long_edge_size, padd_value=self.back_color)
+        # random flip 
+        image = random_flip(image, left_right_probability=0.5, up_down_probability=0.05)
+        return image
+
+
+    def _do_augment_customize1(self, image):
+        """ 自定义数据增强方法1
+            与传统的crop方法比，多了一点多尺度的感觉
+        """
+        # random crop or padding
+        if random.random() < 0.5:
+            # crop
+            image = random_crop(image, crop_probability=0.8, v=0.3)
+        else:
+            # padd
+            image = random_padd(image, padd_probability=0.8, v=0.3, padd_value=self.back_color)
+    
+        # random flip 
+        image = random_flip(image, left_right_probability=0.5, up_down_probability=0.05)
+    
+        # cutout
+        if random.random() < 0.8:
+            image = Cutout(image, 0.2, color=self.back_color)
+    
+        # fix the image shape to [size, size]
+        image = self._fix_shape(image)
+        return image
+
+
+    def _do_augment_customize2(self, image):
+        """ 自定义数据增强方法2
+            进行比较强的数据增强
+        """
         # -----color space transformation-----
     
         # 随机调整亮度/对比度
@@ -284,27 +326,6 @@ class data_parallel_generator():
         image, change_flag = random_rotate(image, rotate_prob=0.1, rotate_angle_max=10) 
         
         # -----fix shape-----
-        # fix the image shape to [size, size]
-        image = self._fix_shape(image)
-        return image
-
-
-    def _do_augment_baseline(self, image):
-        # random crop or padding
-        if random.random() < 0.5:
-            # crop
-            image = random_crop(image, crop_probability=0.8, v=0.3)
-        else:
-            # padd
-            image = random_padd(image, padd_probability=0.8, v=0.3, padd_value=self.back_color)
-    
-        # random flip 
-        image = random_flip(image, left_right_probability=0.5, up_down_probability=0.05)
-    
-        # cutout
-        if random.random() < 0.8:
-            image = Cutout(image, 0.2, color=self.back_color)
-    
         # fix the image shape to [size, size]
         image = self._fix_shape(image)
         return image

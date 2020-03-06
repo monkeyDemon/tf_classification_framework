@@ -46,7 +46,7 @@ DATASET:
   TRAIN_DATA_PROPORTION: 0.9            # The number of shards per dataset split, also determine the ratio of train and validation set
   DATASET_RANDOM_SEED: 0                # Seed for repeatability.
   MAX_SAMPLE_PER_CLASS: -1              # max sample number for per category, set -1 to no use this parameter(please only use -1, other value has bug now)
-  AUGMENT_METHOD: baseline              # the augmentation method to use: now can use 'baseline', 'general1' or 'none'
+  AUGMENT_METHOD: baseline              # the augmentation method to use: now can use 'baseline', 'customize1', 'customize2' or 'none'
   DATA_WORKERS: 15
   USE_CHANNEL_NORMALIZATION: 0          # use channel mean to do normalization or just img = (img - 128) / 128
 OUTPUT:

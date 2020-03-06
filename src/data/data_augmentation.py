@@ -33,21 +33,18 @@ def random_crop(image, crop_probability=0.8, v=0.125):
     width, height = image.size
     h_st = int(height * intensity * random.random())
     h_ed = height - 1 - int(height * intensity * random.random())
-    new_h = h_ed - h_st + 1
+    new_h = h_ed - h_st
     w_st = int(width * intensity * random.random())
     w_ed = width - 1 - int(width * intensity * random.random())
-    new_w = w_ed - w_st + 1
-
+    new_w = w_ed - w_st
     # check
     if new_w > 0 and new_h > 0: 
-        crop_box = [w_st, h_st, new_w, new_h] 
-        return image
+        crop_box = [w_st, h_st, w_ed, h_ed] 
+        image_cropped = image.crop(crop_box)
+        return image_cropped
     else:
         raise RuntimeError("may be has bug, check")
         return image
-
-    image_cropped = image.crop(crop_box)
-    return image_cropped
 
 
 # random padding
@@ -70,6 +67,25 @@ def random_padd(image, padd_probability=0.8, v=0.125, padd_value=(0,0,0)):
     #back_image.paste(image, (w_st, h_st, width, height))
     back_image.paste(image, (w_st, h_st))
     return back_image
+
+
+def random_crop_with_padd(image, padd_size, crop_size, padd_value=(0,0,0)):
+    """先padd后随机crop
+    """
+    width, height = image.size
+    new_width = int(width + 2 * padd_size)
+    new_height = int(height + 2 * padd_size)
+    
+    # padding
+    back_image = PIL.Image.new('RGB', (new_width, new_height), padd_value)
+    back_image.paste(image, (padd_size, padd_size))
+    
+    w_st = int(random.random() * (padd_size * 2 -1))
+    h_st = int(random.random() * (padd_size * 2 -1))
+    crop_box = [w_st, h_st, w_st + crop_size, h_st + crop_size] 
+    image_cropped = back_image.crop(crop_box)
+    return image_cropped
+
 
 
 # random flip
@@ -535,7 +551,7 @@ if __name__ == "__main__":
     
     debug_img_dir = '/new_train_data/ansheng/porn_dataset/hx6/normal'
     debug_save_dir = 'visual_debug'
-    debug_num = 200
+    debug_num = 20
 
     cnt = 0 
     total_time = 0
