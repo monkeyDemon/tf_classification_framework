@@ -1,5 +1,5 @@
 cv2
 shyaml
-Pillow==6.2.1
+Pillow==8.3.2
 pandas
 tensorflow-gpu==1.15.2
